@@ -8,56 +8,59 @@ import (
 	"time"
 )
 
+// ADD your key here
 const key = `-----BEGIN RSA PRIVATE KEY-----
 
 -----END RSA PRIVATE KEY-----`
 
-func run(server string) bool {
+func run(server string) error {
 
 	signer, err := ssh.ParsePrivateKey([]byte(key))
 	if err != nil {
-		fmt.Println("ERROR:", server, err.Error())
-		return false
+		return err
 	}
-
 	config := &ssh.ClientConfig{
+		// EDIT username
 		User: "root",
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
 	}
-
+	// EDIT port
 	client, err := ssh.Dial("tcp", server+":22", config)
 	if err != nil {
-		fmt.Println("ERROR:", server, err.Error())
-		return false
+		return err
 	}
 	session, err := client.NewSession()
 	if err != nil {
-		fmt.Println("ERROR:", server, err.Error())
-		return false
+		return err
 	}
 	defer session.Close()
 
 	var b bytes.Buffer
 	session.Stdout = &b
 	if err := session.Run("ls"); err != nil {
-		fmt.Println("ERROR:", server, err.Error())
-		return false
+		return err
 	}
-	fmt.Println("OK:", server)
-	return true
+	return nil
 }
 
 func runWIthTimeout(server string) bool {
+	// EDIT timeout
 	timeout := time.After(3 * time.Second)
-	resp := make(chan bool)
+	resp := make(chan error)
 	go func(server string) {
 		resp <- run(server)
 	}(server)
 	select {
-	case res := <-resp:
-		return res
+	case e := <-resp:
+		if e != nil {
+			fmt.Println("ERROR:", server, e.Error())
+			return false
+		} else {
+			fmt.Println("OK:", server)
+			return true
+		}
 	case <-timeout:
 		fmt.Println("ERROR:", server, "connection timeout")
 		return false
