@@ -13,11 +13,12 @@ const key = `-----BEGIN RSA PRIVATE KEY-----
 
 -----END RSA PRIVATE KEY-----`
 
-func run(server string) error {
+func run(server string, ret chan<- error) {
 
 	signer, err := ssh.ParsePrivateKey([]byte(key))
 	if err != nil {
-		return err
+		ret <- err
+		return
 	}
 	config := &ssh.ClientConfig{
 		// EDIT username
@@ -29,51 +30,50 @@ func run(server string) error {
 	// EDIT port
 	client, err := ssh.Dial("tcp", server+":22", config)
 	if err != nil {
-		return err
+		ret <- err
+		return
 	}
 	session, err := client.NewSession()
 	if err != nil {
-		return err
+		ret <- err
+		return
 	}
 	defer session.Close()
 
 	var b bytes.Buffer
 	session.Stdout = &b
 	if err := session.Run("ls"); err != nil {
-		return err
+		ret <- err
+		return
 	}
-	return nil
+	ret <- nil
 }
 
-func runWIthTimeout(server string) bool {
+func runWIthTimeout(server string, ret chan<- bool) {
 	// EDIT timeout
 	timeout := time.After(3 * time.Second)
 	resp := make(chan error)
-	go func(server string) {
-		resp <- run(server)
-	}(server)
+	go run(server, resp)
 	select {
 	case e := <-resp:
 		if e != nil {
 			fmt.Println("ERROR:", server, e.Error())
-			return false
+			ret <- false
 		} else {
 			fmt.Println("OK:", server)
-			return true
+			ret <- true
 		}
 	case <-timeout:
 		fmt.Println("ERROR:", server, "connection timeout")
-		return false
+		ret <- false
 	}
 }
 
 func main() {
 	hosts := os.Args[1:]
-	results := make(chan bool, 10)
+	results := make(chan bool)
 	for _, hostname := range hosts {
-		go func(hostname string) {
-			results <- runWIthTimeout(hostname)
-		}(hostname)
+		go runWIthTimeout(hostname, results)
 	}
 	ok := true
 	for i := 0; i < len(hosts); i++ {
